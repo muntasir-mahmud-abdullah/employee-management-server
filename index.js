@@ -60,21 +60,31 @@ async function run() {
     });
     // save task in db
     app.post("/tasks", async (req, res) => {
-      const { task, hours, date } = req.body;
+      const { task, hours, date, email } = req.body;
 
-      if (!task || !hours || !date) {
+      // Validate input
+      if (!task || !hours || !date || !email) {
         return res.status(400).json({ message: "All fields are required" });
       }
 
       try {
         // const db = getDb();
-        const newTask = { task, hours, date };
+        const newTask = { task, hours, date, email };
         const result = taskCollection.insertOne(newTask);
         res.status(201).json({ ...newTask, _id: result.insertedId });
       } catch (error) {
         res.status(500).json({ message: "Error adding task", error });
       }
     });
+
+    //get data by email
+    app.get("/user-tasks",async(req,res)=>{
+      const email = req.query.email;
+      const query = {email:email}
+      const result= await taskCollection.find(query).toArray();
+      res.send(result);
+    })
+
 
     //delete task in db
     app.delete("/tasks/:id", async (req, res) => {
