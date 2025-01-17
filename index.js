@@ -28,6 +28,7 @@ async function run() {
 
     const taskCollection = client.db("employeeDB").collection("Tasks");
     const userCollection = client.db("employeeDB").collection("users");
+    const paymentCollection = client.db("employeeDB").collection("payments");
 
     // users related api
     app.get("/users", async (req, res) => {
@@ -78,13 +79,12 @@ async function run() {
     });
 
     //get data by email
-    app.get("/user-tasks",async(req,res)=>{
+    app.get("/user-tasks", async (req, res) => {
       const email = req.query.email;
-      const query = {email:email}
-      const result= await taskCollection.find(query).toArray();
+      const query = { email: email };
+      const result = await taskCollection.find(query).toArray();
       res.send(result);
-    })
-
+    });
 
     //delete task in db
     app.delete("/tasks/:id", async (req, res) => {
@@ -136,6 +136,41 @@ async function run() {
         res.status(500).json({ message: "Error updating task", error });
       }
     });
+
+    app.get("/payments", async (req, res) => {
+      const email = req.query.email;
+      const page = parseInt(req.query.page) || 1;
+      const limit = 5; // Items per page
+      const skip = (page - 1) * limit;
+
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      try {
+        const paymentsQuery = paymentCollection
+          .find({ email }) // Filter by email
+          .sort({ year: 1, month: 1 }) // Sort by year and month in ascending order
+          .skip(skip) // Pagination: skip items
+          .limit(limit); // Pagination: limit items
+
+        const payments = await paymentsQuery.toArray();
+        const totalPayments = await paymentCollection.countDocuments({ email });
+
+        const totalPages = Math.ceil(totalPayments / limit);
+
+        res.status(200).json({
+          payments,
+          totalPages,
+        });
+      } catch (error) {
+        console.error("Error fetching payment history:", error);
+        res
+          .status(500)
+          .json({ message: "Error fetching payment history", error });
+      }
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
