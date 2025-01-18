@@ -323,6 +323,38 @@ async function run() {
     });
     
 
+    // admin dashboard
+
+    app.get("/verified-employees", async (req, res) => {
+      try {
+        const employees = await userCollection.find({ isVerified: true }).toArray();
+        res.status(200).json(employees);
+      } catch (error) {
+        console.error("Error fetching verified employees:", error);
+        res.status(500).json({ message: "Error fetching verified employees", error });
+      }
+    });
+
+    app.patch("/employees/:id/make-hr", async (req, res) => {
+      const { id } = req.params;
+    
+      try {
+        const result = await userCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { role: "HR" } }
+        );
+    
+        if (result.modifiedCount > 0) {
+          res.status(200).json({ message: "Employee promoted to HR successfully" });
+        } else {
+          res.status(404).json({ message: "Employee not found or already an HR" });
+        }
+      } catch (error) {
+        console.error("Error promoting employee to HR:", error);
+        res.status(500).json({ message: "Error promoting employee to HR", error });
+      }
+    });
+    
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
