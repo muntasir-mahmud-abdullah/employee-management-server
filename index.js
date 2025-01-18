@@ -285,9 +285,9 @@ async function run() {
           .sort({ year: 1, month: 1 }) // Sort by year and month
           .toArray();
         console.log(payments);
-        if (payments.length === 0) {
-          return res.status(404).json({ message: "No payment history found" });
-        }
+        // if (payments.length === 0) {
+        //   return [];
+        // }
 
         res.status(200).json(payments);
       } catch (error) {
