@@ -301,29 +301,27 @@ async function run() {
     // hr work manangement
 
     app.get("/progress", async (req, res) => {
-      const { name, month } = req.query; // Extract name and month from query parameters
-
+      const { name, month } = req.query; // Extract name and month from query params
+    
       try {
+        // Build query object
         let query = {};
-
-        // Add filters to the query
         if (name) {
           query.name = name; // Filter by employee name
         }
         if (month) {
           query.month = month; // Filter by month
         }
-
-        const workRecords = await workCollection.find(query).toArray();
-        console.log(workRecords);
-        res.status(200).json(workRecords);
+    
+        // Fetch filtered tasks from taskCollection
+        const tasks = await taskCollection.find(query).toArray();
+        res.status(200).json(tasks);
       } catch (error) {
-        console.error("Error fetching progress records:", error);
-        res
-          .status(500)
-          .json({ message: "Error fetching progress records", error });
+        console.error("Error fetching tasks:", error);
+        res.status(500).json({ message: "Error fetching tasks", error });
       }
     });
+    
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
