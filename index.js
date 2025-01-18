@@ -72,7 +72,22 @@ async function run() {
 
       try {
         // const db = getDb();
-        const newTask = { task, hours, date, email, name };
+        const monthNames = [
+          "January",
+          "February",
+          "March",
+          "April",
+          "May",
+          "June",
+          "July",
+          "August",
+          "September",
+          "October",
+          "November",
+          "December",
+        ];
+        const month = monthNames[new Date(date).getMonth()];
+        const newTask = { task, hours, date, email, name, month };
         const result = taskCollection.insertOne(newTask);
         res.status(201).json({ ...newTask, _id: result.insertedId });
       } catch (error) {
