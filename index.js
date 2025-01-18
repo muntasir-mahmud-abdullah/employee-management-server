@@ -30,13 +30,13 @@ async function run() {
     const userCollection = client.db("employeeDB").collection("users");
     const paymentCollection = client.db("employeeDB").collection("payments");
     const payrollCollection = client.db("employeeDB").collection("payrolls");
-    const workCollection = client.db("employeeDB").collection("works");
 
     // users related api
     app.get("/users", async (req, res) => {
       const result = await userCollection.find().toArray();
       res.send(result);
     });
+
     app.post("/users", async (req, res) => {
       const user = req.body;
       const query = { email: user.email };
@@ -44,12 +44,33 @@ async function run() {
       if (existingUser) {
         return res.send({ message: "user already exists", insertedId: null });
       }
+
       const result = await userCollection.insertOne({
         ...user,
         role: "employee",
         // timestamp: Date.now(),
       });
       res.send(result);
+    });
+
+    // log in related for fired
+    app.get("/employees/:email", async (req, res) => {
+      const email = req.params.email;
+
+      try {
+        const employee = await userCollection.findOne({ email });
+
+        if (!employee) {
+          return res.status(404).json({ message: "Employee not found" });
+        }
+
+        res.status(200).json(employee);
+      } catch (error) {
+        console.error("Error fetching employee details:", error);
+        res
+          .status(500)
+          .json({ message: "Error fetching employee details", error });
+      }
     });
 
     // Fetch all tasks
@@ -302,7 +323,7 @@ async function run() {
 
     app.get("/progress", async (req, res) => {
       const { name, month } = req.query; // Extract name and month from query params
-    
+
       try {
         // Build query object
         let query = {};
@@ -312,7 +333,7 @@ async function run() {
         if (month) {
           query.month = month; // Filter by month
         }
-    
+
         // Fetch filtered tasks from taskCollection
         const tasks = await taskCollection.find(query).toArray();
         res.status(200).json(tasks);
@@ -321,40 +342,71 @@ async function run() {
         res.status(500).json({ message: "Error fetching tasks", error });
       }
     });
-    
 
     // admin dashboard
 
     app.get("/verified-employees", async (req, res) => {
       try {
-        const employees = await userCollection.find({ isVerified: true }).toArray();
+        const employees = await userCollection
+          .find({ isVerified: true })
+          .toArray();
         res.status(200).json(employees);
       } catch (error) {
         console.error("Error fetching verified employees:", error);
-        res.status(500).json({ message: "Error fetching verified employees", error });
+        res
+          .status(500)
+          .json({ message: "Error fetching verified employees", error });
       }
     });
 
     app.patch("/employees/:id/make-hr", async (req, res) => {
       const { id } = req.params;
-    
+
       try {
         const result = await userCollection.updateOne(
           { _id: new ObjectId(id) },
           { $set: { role: "HR" } }
         );
-    
+
         if (result.modifiedCount > 0) {
-          res.status(200).json({ message: "Employee promoted to HR successfully" });
+          res
+            .status(200)
+            .json({ message: "Employee promoted to HR successfully" });
         } else {
-          res.status(404).json({ message: "Employee not found or already an HR" });
+          res
+            .status(404)
+            .json({ message: "Employee not found or already an HR" });
         }
       } catch (error) {
         console.error("Error promoting employee to HR:", error);
-        res.status(500).json({ message: "Error promoting employee to HR", error });
+        res
+          .status(500)
+          .json({ message: "Error promoting employee to HR", error });
       }
     });
-    
+
+    app.patch("/employees/:id/fire", async (req, res) => {
+      const { id } = req.params;
+
+      try {
+        const result = await userCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { isFired: true } }
+        );
+
+        if (result.modifiedCount > 0) {
+          res.status(200).json({ message: "Employee fired successfully" });
+        } else {
+          res
+            .status(404)
+            .json({ message: "Employee not found or already fired" });
+        }
+      } catch (error) {
+        console.error("Error firing employee:", error);
+        res.status(500).json({ message: "Error firing employee", error });
+      }
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
