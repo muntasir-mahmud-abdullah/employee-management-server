@@ -29,6 +29,8 @@ async function run() {
     const taskCollection = client.db("employeeDB").collection("Tasks");
     const userCollection = client.db("employeeDB").collection("users");
     const paymentCollection = client.db("employeeDB").collection("payments");
+    const payrollCollection = client.db("employeeDB").collection("payrolls");
+    const workCollection = client.db("employeeDB").collection("works");
 
     // users related api
     app.get("/users", async (req, res) => {
@@ -170,6 +172,143 @@ async function run() {
           .json({ message: "Error fetching payment history", error });
       }
     });
+
+    //get all employee
+
+    app.get("/employees", async (req, res) => {
+      try {
+        const employees = await userCollection
+          .find({ role: { $ne: "Admin" } }) // Exclude Admins
+          .project({
+            name: 1,
+            email: 1,
+            bank_account_no: 1,
+            salary: 1,
+            isVerified: 1,
+          })
+          .toArray();
+
+        res.status(200).json(employees);
+      } catch (error) {
+        console.error("Error fetching employees:", error);
+        res.status(500).json({ message: "Error fetching employees", error });
+      }
+    });
+
+    //update employee isverified field
+    app.put("/employees/:id/verify", async (req, res) => {
+      const { id } = req.params;
+      const { isVerified } = req.body; // New verified status
+      console.log(id, isVerified);
+
+      try {
+        const result = await userCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { isVerified } }
+        );
+
+        res
+          .status(200)
+          .json({ message: "Verification status updated", result });
+      } catch (error) {
+        console.error("Error updating verification status:", error);
+        res
+          .status(500)
+          .json({ message: "Error updating verification status", error });
+      }
+    });
+
+    //create payment request
+
+    app.post("/payroll", async (req, res) => {
+      const { email, amount, month, year } = req.body;
+
+      try {
+        const result = await payrollCollection.insertOne({
+          email,
+          amount,
+          month,
+          year,
+          status: "Pending", // Default status
+        });
+
+        res.status(200).json({ message: "Payment request created", result });
+      } catch (error) {
+        console.error("Error creating payment request:", error);
+        res
+          .status(500)
+          .json({ message: "Error creating payment request", error });
+      }
+    });
+    //details/:slug
+    app.get("/employees/:email", async (req, res) => {
+      const email = req.params.email; // Decode the email from the slug
+
+      try {
+        const employee = await userCollection.findOne({ email });
+
+        if (!employee) {
+          return res.status(404).json({ message: "Employee not found" });
+        }
+
+        res.status(200).json(employee);
+      } catch (error) {
+        console.error("Error fetching employee details:", error);
+        res
+          .status(500)
+          .json({ message: "Error fetching employee details", error });
+      }
+    });
+
+    app.get("/payments/:email", async (req, res) => {
+      const email =req.params.email; // Decode the email
+      // console.log(email);
+
+      try {
+        const payments = await paymentCollection
+          .find({ email }) // Filter payments by email
+          .sort({ year: 1, month: 1 }) // Sort by year and month
+          .toArray();
+          console.log(payments);
+        if (payments.length === 0) {
+          return res.status(404).json({ message: "No payment history found" });
+        }
+
+        res.status(200).json(payments);
+      } catch (error) {
+        console.error("Error fetching payment history:", error);
+        res
+          .status(500)
+          .json({ message: "Error fetching payment history", error });
+      }
+    });
+
+
+
+    // hr work manangement
+
+    app.get("/progress", async (req, res) => {
+  const { name, month } = req.query; // Extract name and month from query parameters
+
+  try {
+    let query = {};
+
+    // Add filters to the query
+    if (name) {
+      query.name = name; // Filter by employee name
+    }
+    if (month) {
+      query.month = month; // Filter by month
+    }
+
+    const workRecords = await workCollection.find(query).toArray();
+    console.log(workRecords);
+    res.status(200).json(workRecords);
+  } catch (error) {
+    console.error("Error fetching progress records:", error);
+    res.status(500).json({ message: "Error fetching progress records", error });
+  }
+});
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
