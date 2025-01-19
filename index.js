@@ -257,11 +257,12 @@ async function run() {
     //create payment request
 
     app.post("/payroll", async (req, res) => {
-      const { email, amount, month, year } = req.body;
+      const { email,name, amount, month, year } = req.body;
 
       try {
         const result = await payrollCollection.insertOne({
           email,
+          name,
           amount,
           month,
           year,
@@ -407,21 +408,21 @@ async function run() {
       }
     });
 
-    //update salary 
+    //update salary
     app.patch("/employees/:id/salary", async (req, res) => {
       const { id } = req.params;
       const { salary } = req.body;
-    
+
       if (!salary) {
         return res.status(400).json({ message: "Salary is required" });
       }
-    
+
       try {
         const result = await userCollection.updateOne(
           { _id: new ObjectId(id) },
           { $set: { salary: parseFloat(salary) } }
         );
-    
+
         if (result.modifiedCount > 0) {
           res.status(200).json({ message: "Salary updated successfully" });
         } else {
@@ -432,6 +433,41 @@ async function run() {
         res.status(500).json({ message: "Error updating salary", error });
       }
     });
+
+    // payroll route
+
+    app.get("/payroll", async (req, res) => {
+      try {
+        const payrollRequests = await payrollCollection.find().toArray();
+        console.log(payrollRequests);
+        res.status(200).json(payrollRequests);
+      } catch (error) {
+        console.error("Error fetching payroll requests:", error);
+        res.status(500).json({ message: "Error fetching payroll requests", error });
+      }
+    });
+
+    app.patch("/payroll/:id/pay", async (req, res) => {
+      const { id } = req.params;
+      const paymentDate = new Date().toISOString(); // Get current date
+    
+      try {
+        const result = await payrollCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { isPaid: true, paymentDate } }
+        );
+    
+        if (result.modifiedCount > 0) {
+          res.status(200).json({ message: "Payment processed successfully", paymentDate });
+        } else {
+          res.status(404).json({ message: "Payment request not found" });
+        }
+      } catch (error) {
+        console.error("Error processing payment:", error);
+        res.status(500).json({ message: "Error processing payment", error });
+      }
+    });
+    
     
 
     // Send a ping to confirm a successful connection
