@@ -432,6 +432,19 @@ async function run() {
       }
 
       try {
+
+            // Fetch the current employee details
+    const employee = await userCollection.findOne({ _id: new ObjectId(id) });
+
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found." });
+    }
+            // Check if the new salary is greater than the current salary
+    if (parseFloat(salary) <= parseFloat(employee.salary)) {
+      return res
+        .status(400)
+        .json({ message: "New salary must be greater than the current salary." });
+    }
         const result = await userCollection.updateOne(
           { _id: new ObjectId(id) },
           { $set: { salary: parseFloat(salary) } }
