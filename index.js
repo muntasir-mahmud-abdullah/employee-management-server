@@ -407,6 +407,33 @@ async function run() {
       }
     });
 
+    //update salary 
+    app.patch("/employees/:id/salary", async (req, res) => {
+      const { id } = req.params;
+      const { salary } = req.body;
+    
+      if (!salary) {
+        return res.status(400).json({ message: "Salary is required" });
+      }
+    
+      try {
+        const result = await userCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { salary: parseFloat(salary) } }
+        );
+    
+        if (result.modifiedCount > 0) {
+          res.status(200).json({ message: "Salary updated successfully" });
+        } else {
+          res.status(404).json({ message: "Employee not found" });
+        }
+      } catch (error) {
+        console.error("Error updating salary:", error);
+        res.status(500).json({ message: "Error updating salary", error });
+      }
+    });
+    
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
