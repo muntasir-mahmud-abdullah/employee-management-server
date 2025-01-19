@@ -30,6 +30,7 @@ async function run() {
     const userCollection = client.db("employeeDB").collection("users");
     const paymentCollection = client.db("employeeDB").collection("payments");
     const payrollCollection = client.db("employeeDB").collection("payrolls");
+    const messageCollection = client.db("employeeDB").collection("messages");
 
     // users related api
     app.get("/users", async (req, res) => {
@@ -257,7 +258,7 @@ async function run() {
     //create payment request
 
     app.post("/payroll", async (req, res) => {
-      const { email,name, amount, month, year } = req.body;
+      const { email, name, amount, month, year } = req.body;
 
       try {
         const result = await payrollCollection.insertOne({
@@ -443,22 +444,26 @@ async function run() {
         res.status(200).json(payrollRequests);
       } catch (error) {
         console.error("Error fetching payroll requests:", error);
-        res.status(500).json({ message: "Error fetching payroll requests", error });
+        res
+          .status(500)
+          .json({ message: "Error fetching payroll requests", error });
       }
     });
 
     app.patch("/payroll/:id/pay", async (req, res) => {
       const { id } = req.params;
       const paymentDate = new Date().toISOString(); // Get current date
-    
+
       try {
         const result = await payrollCollection.updateOne(
           { _id: new ObjectId(id) },
           { $set: { isPaid: true, paymentDate } }
         );
-    
+
         if (result.modifiedCount > 0) {
-          res.status(200).json({ message: "Payment processed successfully", paymentDate });
+          res
+            .status(200)
+            .json({ message: "Payment processed successfully", paymentDate });
         } else {
           res.status(404).json({ message: "Payment request not found" });
         }
@@ -467,7 +472,42 @@ async function run() {
         res.status(500).json({ message: "Error processing payment", error });
       }
     });
-    
+
+    //Contact us
+
+    app.post("/messages", async (req, res) => {
+      const { email, message } = req.body;
+
+      if (!email || !message) {
+        return res
+          .status(400)
+          .json({ message: "Email and message are required" });
+      }
+
+      try {
+        const newMessage = { email, message, date: new Date(message.date).toLocaleString("en-BD", { timeZone: "Asia/Dhaka" }) };
+        const result = await messageCollection.insertOne(newMessage);
+
+        if (result.insertedId) {
+          res.status(201).json({ message: "Message sent successfully" });
+        } else {
+          res.status(500).json({ message: "Failed to send message" });
+        }
+      } catch (error) {
+        console.error("Error saving message:", error);
+        res.status(500).json({ message: "Error saving message", error });
+      }
+    });
+
+    app.get("/messages", async (req, res) => {
+      try {
+        const messages = await messageCollection.find().sort({ date: -1 }).toArray();
+        res.status(200).json(messages);
+      } catch (error) {
+        console.error("Error fetching messages:", error);
+        res.status(500).json({ message: "Error fetching messages", error });
+      }
+    });
     
 
     // Send a ping to confirm a successful connection
