@@ -1,7 +1,7 @@
 const express = require("express");
 const app = express();
-const cookieParser = require("cookie-parser");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const port = process.env.PORT || 5000;
 
@@ -31,6 +31,53 @@ async function run() {
     const paymentCollection = client.db("employeeDB").collection("payments");
     const payrollCollection = client.db("employeeDB").collection("payrolls");
     const messageCollection = client.db("employeeDB").collection("messages");
+
+    //jwt related api
+
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "1h",
+      });
+      res.send({ token });
+    });
+
+    //middlewares
+    const verifyToken = (req, res, next) => {
+      console.log("inside verify token", req.headers.authorization);
+      if (!req.headers.authorization) {
+        return res.status(401).send({ message: "unauthorized access" });
+      }
+      const token = req.headers.authorization.split(" ")[1];
+      jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+        if (err) {
+          return res.status(401).send({ message: "unauthorized access" });
+        }
+        req.decoded = decoded;
+        next();
+      });
+    };
+
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isAdmin = user?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+    const verifyHR = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isHR = user?.role === "HR";
+      if (!isHR) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
 
     // users related api
     app.get("/users", async (req, res) => {
@@ -212,10 +259,10 @@ async function run() {
 
     //get all employee
 
-    app.get("/employees", async (req, res) => {
+    app.get("/employees", verifyToken, verifyHR, async (req, res) => {
       try {
         const employees = await userCollection
-          .find({ role: { $ne: "Admin" } }) // Exclude Admins
+          .find({ role: { $ne: "admin" } }) // Exclude Admins
           .project({
             name: 1,
             email: 1,
@@ -233,31 +280,36 @@ async function run() {
     });
 
     //update employee isverified field
-    app.put("/employees/:id/verify", async (req, res) => {
-      const { id } = req.params;
-      const { isVerified } = req.body; // New verified status
-      console.log(id, isVerified);
+    app.put(
+      "/employees/:id/verify",
+      verifyToken,
+      verifyHR,
+      async (req, res) => {
+        const { id } = req.params;
+        const { isVerified } = req.body; // New verified status
+        console.log(id, isVerified);
 
-      try {
-        const result = await userCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { isVerified } }
-        );
+        try {
+          const result = await userCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { isVerified } }
+          );
 
-        res
-          .status(200)
-          .json({ message: "Verification status updated", result });
-      } catch (error) {
-        console.error("Error updating verification status:", error);
-        res
-          .status(500)
-          .json({ message: "Error updating verification status", error });
+          res
+            .status(200)
+            .json({ message: "Verification status updated", result });
+        } catch (error) {
+          console.error("Error updating verification status:", error);
+          res
+            .status(500)
+            .json({ message: "Error updating verification status", error });
+        }
       }
-    });
+    );
 
     //create payment request
 
-    app.post("/payroll", async (req, res) => {
+    app.post("/payroll", verifyToken, verifyHR, async (req, res) => {
       const { email, name, amount, month, year } = req.body;
 
       try {
@@ -268,11 +320,9 @@ async function run() {
         });
 
         if (existingPayment) {
-          return res
-            .status(400)
-            .json({
-              message: "Payment already exists for this month and year.",
-            });
+          return res.status(400).json({
+            message: "Payment already exists for this month and year.",
+          });
         }
         const result = await payrollCollection.insertOne({
           email,
@@ -292,7 +342,7 @@ async function run() {
       }
     });
     //details/:slug
-    app.get("/employees/:email", async (req, res) => {
+    app.get("/employees/:email", verifyToken, verifyHR, async (req, res) => {
       const email = req.params.email; // Decode the email from the slug
 
       try {
@@ -311,7 +361,7 @@ async function run() {
       }
     });
 
-    app.get("/payments/:email", async (req, res) => {
+    app.get("/payments/:email", verifyToken, verifyHR, async (req, res) => {
       const email = req.params.email; // Decode the email
       // console.log(email);
 
@@ -336,7 +386,7 @@ async function run() {
 
     // hr work manangement
 
-    app.get("/progress", async (req, res) => {
+    app.get("/progress", verifyToken, verifyHR, async (req, res) => {
       const { name, month } = req.query; // Extract name and month from query params
 
       try {
@@ -360,110 +410,131 @@ async function run() {
 
     // admin dashboard
 
-    app.get("/verified-employees", async (req, res) => {
-      try {
-        const employees = await userCollection
-          .find({ isVerified: true })
-          .toArray();
-        res.status(200).json(employees);
-      } catch (error) {
-        console.error("Error fetching verified employees:", error);
-        res
-          .status(500)
-          .json({ message: "Error fetching verified employees", error });
-      }
-    });
-
-    app.patch("/employees/:id/make-hr", async (req, res) => {
-      const { id } = req.params;
-
-      try {
-        const result = await userCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { role: "HR" } }
-        );
-
-        if (result.modifiedCount > 0) {
+    app.get(
+      "/verified-employees",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const employees = await userCollection
+            .find({ isVerified: true })
+            .toArray();
+          res.status(200).json(employees);
+        } catch (error) {
+          console.error("Error fetching verified employees:", error);
           res
-            .status(200)
-            .json({ message: "Employee promoted to HR successfully" });
-        } else {
-          res
-            .status(404)
-            .json({ message: "Employee not found or already an HR" });
+            .status(500)
+            .json({ message: "Error fetching verified employees", error });
         }
-      } catch (error) {
-        console.error("Error promoting employee to HR:", error);
-        res
-          .status(500)
-          .json({ message: "Error promoting employee to HR", error });
       }
-    });
+    );
 
-    app.patch("/employees/:id/fire", async (req, res) => {
-      const { id } = req.params;
+    app.patch(
+      "/employees/:id/make-hr",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { id } = req.params;
 
-      try {
-        const result = await userCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { isFired: true } }
-        );
+        try {
+          const result = await userCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { role: "HR" } }
+          );
 
-        if (result.modifiedCount > 0) {
-          res.status(200).json({ message: "Employee fired successfully" });
-        } else {
+          if (result.modifiedCount > 0) {
+            res
+              .status(200)
+              .json({ message: "Employee promoted to HR successfully" });
+          } else {
+            res
+              .status(404)
+              .json({ message: "Employee not found or already an HR" });
+          }
+        } catch (error) {
+          console.error("Error promoting employee to HR:", error);
           res
-            .status(404)
-            .json({ message: "Employee not found or already fired" });
+            .status(500)
+            .json({ message: "Error promoting employee to HR", error });
         }
-      } catch (error) {
-        console.error("Error firing employee:", error);
-        res.status(500).json({ message: "Error firing employee", error });
       }
-    });
+    );
+
+    app.patch(
+      "/employees/:id/fire",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { id } = req.params;
+
+        try {
+          const result = await userCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { isFired: true } }
+          );
+
+          if (result.modifiedCount > 0) {
+            res.status(200).json({ message: "Employee fired successfully" });
+          } else {
+            res
+              .status(404)
+              .json({ message: "Employee not found or already fired" });
+          }
+        } catch (error) {
+          console.error("Error firing employee:", error);
+          res.status(500).json({ message: "Error firing employee", error });
+        }
+      }
+    );
 
     //update salary
-    app.patch("/employees/:id/salary", async (req, res) => {
-      const { id } = req.params;
-      const { salary } = req.body;
+    app.patch(
+      "/employees/:id/salary",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { id } = req.params;
+        const { salary } = req.body;
 
-      if (!salary) {
-        return res.status(400).json({ message: "Salary is required" });
-      }
-
-      try {
-
-            // Fetch the current employee details
-    const employee = await userCollection.findOne({ _id: new ObjectId(id) });
-
-    if (!employee) {
-      return res.status(404).json({ message: "Employee not found." });
-    }
-            // Check if the new salary is greater than the current salary
-    if (parseFloat(salary) <= parseFloat(employee.salary)) {
-      return res
-        .status(400)
-        .json({ message: "New salary must be greater than the current salary." });
-    }
-        const result = await userCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { salary: parseFloat(salary) } }
-        );
-
-        if (result.modifiedCount > 0) {
-          res.status(200).json({ message: "Salary updated successfully" });
-        } else {
-          res.status(404).json({ message: "Employee not found" });
+        if (!salary) {
+          return res.status(400).json({ message: "Salary is required" });
         }
-      } catch (error) {
-        console.error("Error updating salary:", error);
-        res.status(500).json({ message: "Error updating salary", error });
+
+        try {
+          // Fetch the current employee details
+          const employee = await userCollection.findOne({
+            _id: new ObjectId(id),
+          });
+
+          if (!employee) {
+            return res.status(404).json({ message: "Employee not found." });
+          }
+          // Check if the new salary is greater than the current salary
+          if (parseFloat(salary) <= parseFloat(employee.salary)) {
+            return res.status(400).json({
+              message: "New salary must be greater than the current salary.",
+            });
+          }
+          const result = await userCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { salary: parseFloat(salary) } }
+          );
+
+          if (result.modifiedCount > 0) {
+            res.status(200).json({ message: "Salary updated successfully" });
+          } else {
+            res.status(404).json({ message: "Employee not found" });
+          }
+        } catch (error) {
+          console.error("Error updating salary:", error);
+          res.status(500).json({ message: "Error updating salary", error });
+        }
       }
-    });
+    );
 
     // payroll route
 
-    app.get("/payroll", async (req, res) => {
+    app.get("/payroll", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const payrollRequests = await payrollCollection.find().toArray();
         console.log(payrollRequests);
@@ -476,28 +547,33 @@ async function run() {
       }
     });
 
-    app.patch("/payroll/:id/pay", async (req, res) => {
-      const { id } = req.params;
-      const paymentDate = new Date().toISOString(); // Get current date
+    app.patch(
+      "/payroll/:id/pay",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { id } = req.params;
+        const paymentDate = new Date().toISOString(); // Get current date
 
-      try {
-        const result = await payrollCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { isPaid: true, paymentDate } }
-        );
+        try {
+          const result = await payrollCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { isPaid: true, paymentDate } }
+          );
 
-        if (result.modifiedCount > 0) {
-          res
-            .status(200)
-            .json({ message: "Payment processed successfully", paymentDate });
-        } else {
-          res.status(404).json({ message: "Payment request not found" });
+          if (result.modifiedCount > 0) {
+            res
+              .status(200)
+              .json({ message: "Payment processed successfully", paymentDate });
+          } else {
+            res.status(404).json({ message: "Payment request not found" });
+          }
+        } catch (error) {
+          console.error("Error processing payment:", error);
+          res.status(500).json({ message: "Error processing payment", error });
         }
-      } catch (error) {
-        console.error("Error processing payment:", error);
-        res.status(500).json({ message: "Error processing payment", error });
       }
-    });
+    );
 
     //Contact us
 
@@ -531,7 +607,7 @@ async function run() {
       }
     });
 
-    app.get("/messages", async (req, res) => {
+    app.get("/messages", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const messages = await messageCollection
           .find()
