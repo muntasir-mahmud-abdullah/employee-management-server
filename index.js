@@ -261,6 +261,19 @@ async function run() {
       const { email, name, amount, month, year } = req.body;
 
       try {
+        const existingPayment = await payrollCollection.findOne({
+          email,
+          month,
+          year,
+        });
+
+        if (existingPayment) {
+          return res
+            .status(400)
+            .json({
+              message: "Payment already exists for this month and year.",
+            });
+        }
         const result = await payrollCollection.insertOne({
           email,
           name,
@@ -485,7 +498,13 @@ async function run() {
       }
 
       try {
-        const newMessage = { email, message, date: new Date(message.date).toLocaleString("en-BD", { timeZone: "Asia/Dhaka" }) };
+        const newMessage = {
+          email,
+          message,
+          date: new Date(message.date).toLocaleString("en-BD", {
+            timeZone: "Asia/Dhaka",
+          }),
+        };
         const result = await messageCollection.insertOne(newMessage);
 
         if (result.insertedId) {
@@ -501,14 +520,16 @@ async function run() {
 
     app.get("/messages", async (req, res) => {
       try {
-        const messages = await messageCollection.find().sort({ date: -1 }).toArray();
+        const messages = await messageCollection
+          .find()
+          .sort({ date: -1 })
+          .toArray();
         res.status(200).json(messages);
       } catch (error) {
         console.error("Error fetching messages:", error);
         res.status(500).json({ message: "Error fetching messages", error });
       }
     });
-    
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
