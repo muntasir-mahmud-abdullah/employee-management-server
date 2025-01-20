@@ -223,9 +223,6 @@ async function run() {
       }
     });
 
-
-
-    
     app.get("/payments", async (req, res) => {
       const email = req.query.email;
       const page = parseInt(req.query.page) || 1;
@@ -344,6 +341,64 @@ async function run() {
           .json({ message: "Error creating payment request", error });
       }
     });
+
+
+    // insert payment after admin approval
+
+    // Insert payment after admin approval
+app.post("/payments", verifyToken, verifyAdmin, async (req, res) => {
+  const { email, amount, month, year } = req.body;
+
+  // Validate input
+  if (!email || !amount || !month || !year) {
+    return res.status(400).json({ message: "All fields are required" });
+  }
+
+  try {
+    // Check if payment already exists for the same month and year
+    const existingPayment = await paymentCollection.findOne({
+      email,
+      month,
+      year,
+    });
+
+    if (existingPayment) {
+      return res.status(400).json({
+        message: "Payment for this month and year already exists.",
+      });
+    }
+
+    // Insert payment record
+    const newPayment = {
+      email,
+      amount,
+      month,
+      year,
+      transactionId: `TXN${Date.now()}`,
+      paymentDate: new Date().toLocaleString("en-BD", {
+        timeZone: "Asia/Dhaka",
+      }),
+    };
+
+    const result = await paymentCollection.insertOne(newPayment);
+
+    // If payment is successfully inserted, update payroll status
+    await payrollCollection.updateOne(
+      { email, month, year },
+      { $set: { isPaid: true, paymentDate: newPayment.paymentDate } }
+    );
+
+    res.status(200).json({
+      message: "Payment processed successfully",
+      payment: newPayment,
+    });
+  } catch (error) {
+    console.error("Error processing payment:", error);
+    res.status(500).json({ message: "Error processing payment", error });
+  }
+});
+
+
     //details/:slug
     app.get("/employees/:email", verifyToken, verifyHR, async (req, res) => {
       const email = req.params.email; // Decode the email from the slug
