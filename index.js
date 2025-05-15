@@ -107,7 +107,7 @@ async function run() {
       
       try {
         const employee = await userCollection.findOne({ email });
-        console.log(employee)
+        // console.log(employee)
         if (!employee) {
           return res.status(404).json({ message: "Employee not found" });
         }
