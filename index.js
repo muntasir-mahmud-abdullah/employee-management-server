@@ -104,10 +104,10 @@ async function run() {
     // log in related for fired
     app.get("/employees/:email", async (req, res) => {
       const email = req.params.email;
-
+      
       try {
         const employee = await userCollection.findOne({ email });
-
+        console.log(employee)
         if (!employee) {
           return res.status(404).json({ message: "Employee not found" });
         }
